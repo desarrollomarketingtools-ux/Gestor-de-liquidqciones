@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EDWIN - Sistema de Radicación (N8N Flow)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+        .n8n-node-active { border-color: #ff6d5a; box-shadow: 0 0 0 2px rgba(255, 109, 90, 0.2); }
+        .loader-dots div { animation-timing-function: cubic-bezier(0, 1, 1, 0); }
+        @keyframes loader-dots1 { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+        @keyframes loader-dots2 { 0% { transform: translate(0, 0); } 100% { transform: translate(24px, 0); } }
+    </style>
+</head>
+<body>
+
+    <!-- CONFIGURACIÓN DE ENDPOINTS BASADO EN EL FLUJO DE LA IMAGEN -->
+    <script>
+        const N8N_CONFIG = {
+            USE_MOCK_DATA: true, 
+            WEBHOOK_LISTA: '/webhook/get-liquidaciones',      // Webhook (GET)
+            WEBHOOK_DETALLE: '/webhook-1/seleccionar',        // Webhook 1 (POST)
+            WEBHOOK_PROCESO: '/webhook-2/validar-radicar',    // Webhook 2 (POST)
+        };
+
+        // DATOS SIMULADOS: Carlos Alberto Ruiz
+        const DATA_SIMULADA = {
+            usuario: {
+                id: 'LIQ-2026-999',
+                nombre: 'Carlos Alberto Ruiz',
+                documento: '1.110.222.333',
+                valor: '$5.200.000',
+                empresa: 'TechSolutions S.A.S.',
+                area: 'Gerencia Técnica',
+                fecha: '07/10/2026'
+            }
+        };
+    </script>
+
+    <!-- UI PRINCIPAL -->
+    <div class="min-h-screen flex flex-col">
+        <!-- Header Corporativo -->
+        <header class="bg-[#0f172a] text-white p-5 shadow-xl border-b-4 border-blue-500">
+            <div class="max-w-5xl mx-auto flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-600 p-2 rounded-lg">
+                        <i data-lucide="layers" class="text-white w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-tight">EDWIN <span class="text-blue-400 font-light">| Gestión</span></h1>
+                        <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Conexión Automática n8n</p>
+                    </div>
+                </div>
+                <div class="hidden md:block">
+                    <span class="bg-slate-800 text-slate-300 text-xs px-3 py-1 rounded-full border border-slate-700">
+                        Ambiente: <span class="text-green-400">DEMO LIVE</span>
+                    </span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Pasos del Proceso (Sincronizado con Nodos n8n) -->
+        <nav class="bg-white border-b overflow-x-auto">
+            <div class="max-w-5xl mx-auto flex text-xs font-bold uppercase tracking-wider text-slate-400">
+                <div id="step-1" class="px-6 py-4 border-b-2 border-blue-600 text-blue-600 flex items-center gap-2">
+                    <span class="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-[10px]">1</span> Webhook Inicial
+                </div>
+                <div id="step-2" class="px-6 py-4 flex items-center gap-2">
+                    <span class="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px]">2</span> Webhook 1 (Selección)
+                </div>
+                <div id="step-3" class="px-6 py-4 flex items-center gap-2">
+                    <span class="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px]">3</span> Webhook 2 (Validación)
+                </div>
+            </div>
+        </nav>
+
+        <main class="flex-grow max-w-5xl mx-auto w-full p-6">
+            
+            <!-- VISTA 1: LISTADO (Nodo: Webhook -> HTTP Request -> Respond) -->
+            <div id="view-1" class="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div class="mb-8">
+                    <h2 class="text-2xl font-bold text-slate-800">Liquidaciones Pendientes</h2>
+                    <p class="text-slate-500">Datos recuperados del sistema de nómina mediante HTTP Request.</p>
+                </div>
+
+                <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase">
+                            <tr>
+                                <th class="px-6 py-4">Beneficiario</th>
+                                <th class="px-6 py-4">Valor</th>
+                                <th class="px-6 py-4">Estado</th>
+                                <th class="px-6 py-4 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <tr class="hover:bg-blue-50/30 transition">
+                                <td class="px-6 py-4">
+                                    <div class="font-bold text-slate-800" id="mock-name">Cargando...</div>
+                                    <div class="text-xs text-slate-500" id="mock-id">...</div>
+                                </td>
+                                <td class="px-6 py-4 font-semibold text-slate-700" id="mock-value">...</td>
+                                <td class="px-6 py-4">
+                                    <span class="bg-amber-100 text-amber-700 text-[10px] px-2 py-1 rounded-md font-bold uppercase">Pendiente</span>
+                                </td>
+                                <td class="px-6 py-4 text-right">
+                                    <button onclick="goToStep2()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm">
+                                        Seleccionar
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- VISTA 2: DETALLE (Nodo: Webhook 1 -> HTTP Request 1 -> Respond 1) -->
+            <div id="view-2" class="hidden animate-in fade-in slide-in-from-right-4 duration-500">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 space-y-6">
+                        <div class="bg-white border p-6 rounded-2xl shadow-sm">
+                            <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                <i data-lucide="file-text" class="w-5 h-5 text-blue-500"></i> Información de Liquidación
+                            </h3>
+                            <div class="grid grid-cols-2 gap-y-4 text-sm">
+                                <div><p class="text-slate-400">Nombre:</p><p class="font-bold text-slate-700" id="det-nombre"></p></div>
+                                <div><p class="text-slate-400">Documento:</p><p class="font-bold text-slate-700" id="det-doc"></p></div>
+                                <div><p class="text-slate-400">Empresa:</p><p class="font-bold text-slate-700" id="det-emp"></p></div>
+                                <div><p class="text-slate-400">Fecha de Corte:</p><p class="font-bold text-slate-700" id="det-fecha"></p></div>
+                            </div>
+                        </div>
+
+                        <!-- CARGA DE ARCHIVOS -->
+                        <div class="bg-white border p-6 rounded-2xl shadow-sm space-y-4">
+                            <h3 class="font-bold text-slate-800 mb-2">Documentos requeridos</h3>
+                            
+                            <div class="group relative border-2 border-dashed border-slate-200 rounded-xl p-4 hover:border-blue-400 transition cursor-pointer" onclick="document.getElementById('f1').click()">
+                                <input type="file" id="f1" class="hidden" onchange="fileUI('f1', 'l1')">
+                                <div class="flex items-center gap-4">
+                                    <div class="bg-slate-100 p-3 rounded-lg group-hover:bg-blue-100 transition"><i data-lucide="upload-cloud" class="w-5 h-5 text-slate-500 group-hover:text-blue-600"></i></div>
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-700">Liquidación Firmada</p>
+                                        <p class="text-xs text-slate-400" id="l1">Click para subir (PDF, JPG)</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="group relative border-2 border-dashed border-slate-200 rounded-xl p-4 hover:border-blue-400 transition cursor-pointer" onclick="document.getElementById('f2').click()">
+                                <input type="file" id="f2" class="hidden" onchange="fileUI('f2', 'l2')">
+                                <div class="flex items-center gap-4">
+                                    <div class="bg-slate-100 p-3 rounded-lg group-hover:bg-blue-100 transition"><i data-lucide="credit-card" class="w-5 h-5 text-slate-500 group-hover:text-blue-600"></i></div>
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-700">Certificación Bancaria</p>
+                                        <p class="text-xs text-slate-400" id="l2">Click para subir (PDF, JPG)</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="bg-blue-600 text-white p-6 rounded-2xl shadow-lg shadow-blue-200">
+                            <p class="text-blue-200 text-xs font-bold uppercase mb-1">Total a Radicar</p>
+                            <h2 class="text-3xl font-bold mb-4" id="det-valor"></h2>
+                            <button id="btn-radicar" onclick="startN8NFlow()" class="w-full bg-white text-blue-600 font-bold py-3 rounded-xl hover:bg-blue-50 transition shadow-md">
+                                Iniciar Radicación
+                            </button>
+                        </div>
+                        <button onclick="downloadPDF()" class="w-full flex items-center justify-center gap-2 border border-slate-200 py-3 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50">
+                            <i data-lucide="download" class="w-4 h-4"></i> Descargar Borrador
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VISTA 3: PROCESAMIENTO (Simulando los nodos: If -> HTTP Request 2 -> Code -> If1) -->
+            <div id="view-3" class="hidden flex flex-col items-center justify-center py-20 animate-pulse">
+                <div class="relative w-24 h-24 mb-8">
+                    <div class="absolute inset-0 border-4 border-blue-100 rounded-full"></div>
+                    <div class="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+                </div>
+                <h3 class="text-xl font-bold text-slate-800" id="proc-text">Llamando Webhook 2...</h3>
+                <p class="text-slate-400 text-sm mt-2" id="proc-subtext">Ejecutando validaciones en n8n</p>
+                
+                <div class="mt-10 flex gap-4">
+                    <div class="bg-white p-3 rounded-lg border flex items-center gap-2 grayscale" id="node-val">
+                        <i data-lucide="check-square" class="w-4 h-4"></i> <span class="text-xs font-bold">Validación</span>
+                    </div>
+                    <div class="bg-white p-3 rounded-lg border flex items-center gap-2 grayscale" id="node-code">
+                        <i data-lucide="code" class="w-4 h-4"></i> <span class="text-xs font-bold">JS Code</span>
+                    </div>
+                    <div class="bg-white p-3 rounded-lg border flex items-center gap-2 grayscale" id="node-rad">
+                        <i data-lucide="send" class="w-4 h-4"></i> <span class="text-xs font-bold">Radicación</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL FINAL (Respond to Webhook 4) -->
+    <div id="modal-final" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl scale-in border-t-8 border-green-500">
+            <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i data-lucide="shield-check" class="w-12 h-12"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-slate-800">Radicación Exitosa</h2>
+            <p class="text-slate-500 mt-2 text-sm">El proceso en n8n ha finalizado correctamente.</p>
+            
+            <div class="mt-6 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Número de Radicado</p>
+                <p id="final-radicado" class="text-2xl font-mono font-bold text-blue-600"></p>
+            </div>
+
+            <button onclick="window.location.reload()" class="mt-8 w-full bg-slate-900 text-white font-bold py-4 rounded-2xl hover:shadow-lg transition">
+                Finalizar Proceso
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Inicializar Iconos
+        lucide.createIcons();
+
+        // PASO 1: Cargar Lista (Carlos Alberto Ruiz)
+        setTimeout(() => {
+            document.getElementById('mock-name').innerText = DATA_SIMULADA.usuario.nombre;
+            document.getElementById('mock-id').innerText = DATA_SIMULADA.usuario.id;
+            document.getElementById('mock-value').innerText = DATA_SIMULADA.usuario.valor;
+        }, 800);
+
+        function goToStep2() {
+            document.getElementById('view-1').classList.add('hidden');
+            document.getElementById('view-2').classList.remove('hidden');
+            
+            // Llenar detalles
+            document.getElementById('det-nombre').innerText = DATA_SIMULADA.usuario.nombre;
+            document.getElementById('det-doc').innerText = DATA_SIMULADA.usuario.documento;
+            document.getElementById('det-emp').innerText = DATA_SIMULADA.usuario.empresa;
+            document.getElementById('det-fecha').innerText = DATA_SIMULADA.usuario.fecha;
+            document.getElementById('det-valor').innerText = DATA_SIMULADA.usuario.valor;
+
+            updateStepper(2);
+        }
+
+        function fileUI(id, labelId) {
+            const file = document.getElementById(id).files[0];
+            if(file) document.getElementById(labelId).innerText = "✓ " + file.name;
+        }
+
+        // PASO 3: Simular el flujo de la imagen (Webhook 2 -> Procesamiento)
+        async function startN8NFlow() {
+            const f1 = document.getElementById('f1').files[0];
+            const f2 = document.getElementById('f2').files[0];
+
+            if(!f1 || !f2) {
+                alert("⚠️ Por favor adjunta ambos documentos para continuar.");
+                return;
+            }
+
+            document.getElementById('view-2').classList.add('hidden');
+            document.getElementById('view-3').classList.remove('hidden');
+            updateStepper(3);
+
+            // SIMULACIÓN DE NODOS N8N
+            
+            // 1. Nodo: IF (Verificar archivos)
+            await wait(1000, "proc-text", "Validando archivos recibidos...");
+            markNode('node-val');
+
+            // 2. Nodo: HTTP Request 2 (Consultar sistema externo)
+            await wait(1200, "proc-text", "Consultando sistema de nómina externo...");
+            
+            // 3. Nodo: JavaScript Code (Transformar datos)
+            await wait(1000, "proc-text", "Ejecutando script de transformación (JS Node)...");
+            markNode('node-code');
+
+            // 4. Nodo: Radicación (HTTP Request 3/4)
+            await wait(1500, "proc-text", "Generando radicado oficial...");
+            markNode('node-rad');
+
+            // Respuesta Final: Respond to Webhook 4
+            const rad = "RAD-" + Math.floor(100000 + Math.random() * 900000);
+            document.getElementById('final-radicado').innerText = rad;
+            document.getElementById('modal-final').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function updateStepper(step) {
+            for(let i=1; i<=3; i++) {
+                const el = document.getElementById(`step-${i}`);
+                el.classList.remove('border-blue-600', 'text-blue-600');
+                if(i === step) el.classList.add('border-blue-600', 'text-blue-600');
+            }
+        }
+
+        function markNode(id) {
+            const el = document.getElementById(id);
+            el.classList.remove('grayscale');
+            el.classList.add('bg-green-50', 'border-green-200', 'text-green-600');
+        }
+
+        function wait(ms, id, text) {
+            document.getElementById(id).innerText = text;
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function downloadPDF() {
+            alert("Generando borrador para: " + DATA_SIMULADA.usuario.nombre);
+        }
+    </script>
+
+</body>
+</html>
